@@ -16,7 +16,11 @@ func main() {
 		log.Fatalf("problem opening %s %v", dbFileName, err)
 	}
 
-	store := goker.NewFileSystemPlayerStore(db)
+	store, err := goker.NewFileSystemPlayerStore(db)
+	if err != nil {
+		log.Fatalf("problem creating file system player store, %v", err)
+	}
+
 	server := goker.NewPlayerServer(store)
 
 	if err := http.ListenAndServe(":3000", server); err != nil {
