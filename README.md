@@ -7,6 +7,7 @@ A Texas Hold'em Poker implementation written in Go while following [quii/learn-g
 1. `git clone <url>`
 2. `asdf install`
 3. `go test ./...`
+4. `go run ./cmd/webserver/main.go` OR `go run ./cmd/cli/main.go`
 
 ## Useful Commands
 
