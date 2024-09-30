@@ -3,19 +3,20 @@ package goker
 import (
 	"encoding/json"
 	"io"
+	"os"
 )
 
 type FileSystemPlayerStore struct {
-	Database io.ReadWriteSeeker
+	Database *json.Encoder
 	league   League
 }
 
-func NewFileSystemPlayerStore(database io.ReadWriteSeeker) *FileSystemPlayerStore {
-	database.Seek(0, io.SeekStart)
-	league, _ := NewLeague(database)
+func NewFileSystemPlayerStore(file *os.File) *FileSystemPlayerStore {
+	file.Seek(0, io.SeekStart)
+	league, _ := NewLeague(file)
 
 	return &FileSystemPlayerStore{
-		Database: database,
+		Database: json.NewEncoder(&tape{file}),
 		league:   league,
 	}
 }
@@ -43,6 +44,5 @@ func (f *FileSystemPlayerStore) RecordWin(name string) {
 		f.league = append(f.league, Player{name, 1})
 	}
 
-	f.Database.Seek(0, io.SeekStart)
-	json.NewEncoder(f.Database).Encode(f.league)
+	f.Database.Encode(f.league)
 }
