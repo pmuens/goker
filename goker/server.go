@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"text/template"
 )
 
 const jsonContentType = "application/json"
@@ -31,12 +35,27 @@ func NewPlayerServer(store PlayerStore) *PlayerServer {
 	p.Store = store
 
 	router := http.NewServeMux()
+	router.Handle("/game", http.HandlerFunc(p.game))
 	router.Handle("/league", http.HandlerFunc(p.leagueHandler))
 	router.Handle("/players/", http.HandlerFunc(p.playersHandler))
 
 	p.Handler = router
 
 	return p
+}
+
+func (p *PlayerServer) game(w http.ResponseWriter, r *http.Request) {
+	// See: https://stackoverflow.com/a/38644571
+	_, b, _, _ := runtime.Caller(0)
+	basePath := filepath.Dir(b)
+
+	tmpl, err := template.ParseFiles(path.Join(basePath, "game.html"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("problem loading template %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	tmpl.Execute(w, nil)
 }
 
 func (p *PlayerServer) leagueHandler(w http.ResponseWriter, r *http.Request) {
