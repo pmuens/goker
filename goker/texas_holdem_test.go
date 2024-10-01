@@ -1,6 +1,7 @@
 package goker_test
 
 import (
+	"io"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ func TestTexasHoldemStart(t *testing.T) {
 		blindAlerter := &goker.SpyBlindAlerter{}
 		game := goker.NewTexasHoldem(blindAlerter, dummyPlayerStore)
 
-		game.Start(5)
+		game.Start(5, io.Discard)
 
 		alerts := []goker.ScheduledAlert{
 			{0 * time.Second, 100},
@@ -35,7 +36,7 @@ func TestTexasHoldemStart(t *testing.T) {
 		blindAlerter := &goker.SpyBlindAlerter{}
 		game := goker.NewTexasHoldem(blindAlerter, dummyPlayerStore)
 
-		game.Start(7)
+		game.Start(7, io.Discard)
 
 		alerts := []goker.ScheduledAlert{
 			{0 * time.Second, 100},

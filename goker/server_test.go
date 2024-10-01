@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 func TestGETPlayers(t *testing.T) {
@@ -21,7 +19,7 @@ func TestGETPlayers(t *testing.T) {
 		nil,
 		nil,
 	}
-	server := MustMakePlayerServer(t, &store)
+	server := MustMakePlayerServer(t, &store, DummyGame)
 
 	tests := []struct {
 		name               string
@@ -68,7 +66,7 @@ func TestStoreWins(t *testing.T) {
 		nil,
 		nil,
 	}
-	server := MustMakePlayerServer(t, &store)
+	server := MustMakePlayerServer(t, &store, DummyGame)
 
 	t.Run("it records wins on POST", func(t *testing.T) {
 		player := "Pepper"
@@ -92,7 +90,7 @@ func TestLeague(t *testing.T) {
 		}
 
 		store := StubPlayerStore{nil, nil, wantedLeague}
-		server := MustMakePlayerServer(t, &store)
+		server := MustMakePlayerServer(t, &store, DummyGame)
 
 		request := newLeagueRequest()
 		response := httptest.NewRecorder()
@@ -109,7 +107,7 @@ func TestLeague(t *testing.T) {
 
 func TestGame(t *testing.T) {
 	t.Run("GET /game returns 200", func(t *testing.T) {
-		server := MustMakePlayerServer(t, &StubPlayerStore{})
+		server := MustMakePlayerServer(t, &StubPlayerStore{}, DummyGame)
 
 		request := newGameRequest()
 		response := httptest.NewRecorder()
@@ -119,23 +117,25 @@ func TestGame(t *testing.T) {
 		AssertStatus(t, response.Code, http.StatusOK)
 	})
 
-	t.Run("when we get a message over a websocket it is a winner of a game", func(t *testing.T) {
-		store := &StubPlayerStore{}
+	t.Run("start a game with 3 players, send some blind alerts down WS and declare 'Ruth' as winner", func(t *testing.T) {
+		wantedBlindAlert := "Blind is 100"
 		winner := "Ruth"
-		server := httptest.NewServer(MustMakePlayerServer(t, store))
+
+		game := &GameSpy{BlindAlert: []byte(wantedBlindAlert)}
+		store := &StubPlayerStore{}
+		server := httptest.NewServer(MustMakePlayerServer(t, store, game))
+		ws := MustDialWS(t, "ws"+strings.TrimPrefix(server.URL, "http")+"/ws")
+
 		defer server.Close()
-
-		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
-
-		ws := MustDialWS(t, wsURL)
 		defer ws.Close()
 
-		if err := ws.WriteMessage(websocket.TextMessage, []byte(winner)); err != nil {
-			t.Fatalf("could not send message over ws connection %v", err)
-		}
+		WriteWSMessage(t, ws, "3")
+		WriteWSMessage(t, ws, winner)
 
-		time.Sleep(19 * time.Millisecond)
-		AssertPlayerWin(t, store, winner)
+		AssertGameStartedWith(t, game, 3)
+		AssertFinishCalledWith(t, game, winner)
+
+		Within(t, 10*time.Millisecond, func() { AssertWebsocketGotMessage(t, ws, wantedBlindAlert) })
 	})
 }
 

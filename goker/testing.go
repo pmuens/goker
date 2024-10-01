@@ -14,6 +14,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var DummyGame = &GameSpy{}
+
 // Stubs.
 type StubPlayerStore struct {
 	scores   map[string]int
@@ -39,21 +41,23 @@ type SpyBlindAlerter struct {
 	Alerts []ScheduledAlert
 }
 
-func (s *SpyBlindAlerter) ScheduleAlertAt(at time.Duration, amount int) {
+func (s *SpyBlindAlerter) ScheduleAlertAt(at time.Duration, amount int, to io.Writer) {
 	s.Alerts = append(s.Alerts, ScheduledAlert{at, amount})
 }
 
 type GameSpy struct {
 	StartCalled     bool
 	StartCalledWith int
+	BlindAlert      []byte
 
 	FinishedCalled   bool
 	FinishCalledWith string
 }
 
-func (g *GameSpy) Start(numberOfPlayers int) {
+func (g *GameSpy) Start(numberOfPlayers int, out io.Writer) {
 	g.StartCalled = true
 	g.StartCalledWith = numberOfPlayers
+	out.Write(g.BlindAlert)
 }
 
 func (g *GameSpy) Finish(winner string) {
@@ -108,8 +112,8 @@ func CheckScheduledAlerts(t *testing.T, alerts []ScheduledAlert, blindAlerter *S
 	}
 }
 
-func MustMakePlayerServer(t *testing.T, store PlayerStore) *PlayerServer {
-	server, err := NewPlayerServer(store)
+func MustMakePlayerServer(t *testing.T, store PlayerStore, game Game) *PlayerServer {
+	server, err := NewPlayerServer(store, game)
 	if err != nil {
 		t.Fatalf("problem creating player server %v", err)
 	}
@@ -130,6 +134,35 @@ func WriteWSMessage(t testing.TB, conn *websocket.Conn, message string) {
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
 		t.Fatalf("could not send message over ws connection %v", err)
 	}
+}
+
+func Within(t testing.TB, d time.Duration, assert func()) {
+	t.Helper()
+
+	done := make(chan struct{}, 1)
+
+	go func() {
+		assert()
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(d):
+		t.Error("timed out")
+	case <-done:
+	}
+}
+
+func RetryUntil(d time.Duration, f func() bool) bool {
+	deadline := time.Now().Add(d)
+
+	for time.Now().Before(deadline) {
+		if f() {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Assertions.
@@ -223,7 +256,11 @@ func AssertMessagesSentToUser(t testing.TB, stdout *bytes.Buffer, messages ...st
 func AssertGameStartedWith(t testing.TB, game *GameSpy, numberOfPlayersWanted int) {
 	t.Helper()
 
-	if game.StartCalledWith != numberOfPlayersWanted {
+	passed := RetryUntil(500*time.Millisecond, func() bool {
+		return game.StartCalledWith == numberOfPlayersWanted
+	})
+
+	if !passed {
 		t.Errorf("wanted Start called with %d, but got %d", numberOfPlayersWanted, game.StartCalledWith)
 	}
 }
@@ -247,7 +284,18 @@ func AssertGameNotStarted(t testing.TB, game *GameSpy) {
 func AssertFinishCalledWith(t testing.TB, game *GameSpy, winner string) {
 	t.Helper()
 
-	if game.FinishCalledWith != winner {
+	passed := RetryUntil(500*time.Millisecond, func() bool {
+		return game.FinishCalledWith == winner
+	})
+
+	if !passed {
 		t.Errorf("expected finish called with %q, but got %q", winner, game.FinishCalledWith)
+	}
+}
+
+func AssertWebsocketGotMessage(t *testing.T, ws *websocket.Conn, want string) {
+	_, msg, _ := ws.ReadMessage()
+	if string(msg) != want {
+		t.Errorf("got %s, want %s", string(msg), want)
 	}
 }

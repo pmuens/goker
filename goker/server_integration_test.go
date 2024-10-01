@@ -13,7 +13,7 @@ func TestRecordingWindsAndRetrievingThem(t *testing.T) {
 	store, err := NewFileSystemPlayerStore(database)
 	AssertNoError(t, err)
 
-	server := MustMakePlayerServer(t, store)
+	server := MustMakePlayerServer(t, store, DummyGame)
 	player := "Pepper"
 
 	server.ServeHTTP(httptest.NewRecorder(), newPostWinRequest(player))

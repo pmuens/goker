@@ -16,7 +16,12 @@ func main() {
 	}
 	defer close()
 
-	server, _ := goker.NewPlayerServer(store)
+	game := goker.NewTexasHoldem(goker.BlindAlerterFunc(goker.Alerter), store)
+	server, err := goker.NewPlayerServer(store, game)
+
+	if err != nil {
+		log.Fatalf("problem creating player server %v", err)
+	}
 
 	if err := http.ListenAndServe(":3000", server); err != nil {
 		log.Fatalf("could not listen on port 3000 %v", err)
