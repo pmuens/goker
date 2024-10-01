@@ -1,10 +1,13 @@
 package goker
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,6 +41,24 @@ func (s *SpyBlindAlerter) ScheduleAlertAt(at time.Duration, amount int) {
 	s.Alerts = append(s.Alerts, ScheduledAlert{at, amount})
 }
 
+type GameSpy struct {
+	StartCalled     bool
+	StartCalledWith int
+
+	FinishedCalled   bool
+	FinishCalledWith string
+}
+
+func (g *GameSpy) Start(numberOfPlayers int) {
+	g.StartCalled = true
+	g.StartCalledWith = numberOfPlayers
+}
+
+func (g *GameSpy) Finish(winner string) {
+	g.FinishedCalled = true
+	g.FinishCalledWith = winner
+}
+
 // Types.
 type ScheduledAlert struct {
 	At     time.Duration
@@ -66,6 +87,23 @@ func CreateTempFile(t testing.TB, initialData string) (*os.File, func()) {
 	}
 
 	return tmpFile, removeFile
+}
+
+func UserSends(messages ...string) io.Reader {
+	return strings.NewReader(strings.Join(messages, "\n"))
+}
+
+func CheckScheduledAlerts(t *testing.T, alerts []ScheduledAlert, blindAlerter *SpyBlindAlerter) {
+	for i, want := range alerts {
+		t.Run(fmt.Sprint(want), func(t *testing.T) {
+			if len(blindAlerter.Alerts) <= i {
+				t.Fatalf("alert %d was not scheduled %v", i, blindAlerter.Alerts)
+			}
+
+			got := blindAlerter.Alerts[i]
+			AssertScheduledAlert(t, got, want)
+		})
+	}
 }
 
 // Assertions.
@@ -130,6 +168,8 @@ func AssertResponseBody(t testing.TB, got, want string) {
 }
 
 func AssertScheduledAlert(t testing.TB, got ScheduledAlert, want ScheduledAlert) {
+	t.Helper()
+
 	gotAmount := got.Amount
 	wantAmount := want.Amount
 	if gotAmount != wantAmount {
@@ -140,5 +180,48 @@ func AssertScheduledAlert(t testing.TB, got ScheduledAlert, want ScheduledAlert)
 	wantAt := want.At
 	if gotAt != wantAt {
 		t.Errorf("got scheduled time of %v, want %v", gotAt, wantAt)
+	}
+}
+
+func AssertMessagesSentToUser(t testing.TB, stdout *bytes.Buffer, messages ...string) {
+	t.Helper()
+
+	want := strings.Join(messages, "")
+	got := stdout.String()
+
+	if got != want {
+		t.Errorf("got %q sent to stdout but expected %+v", got, messages)
+	}
+}
+
+func AssertGameStartedWith(t testing.TB, game *GameSpy, numberOfPlayersWanted int) {
+	t.Helper()
+
+	if game.StartCalledWith != numberOfPlayersWanted {
+		t.Errorf("wanted Start called with %d, but got %d", numberOfPlayersWanted, game.StartCalledWith)
+	}
+}
+
+func AssertGameNotFinished(t testing.TB, game *GameSpy) {
+	t.Helper()
+
+	if game.FinishedCalled {
+		t.Errorf("game should not have finished")
+	}
+}
+
+func AssertGameNotStarted(t testing.TB, game *GameSpy) {
+	t.Helper()
+
+	if game.StartCalled {
+		t.Errorf("game should not have started")
+	}
+}
+
+func AssertFinishCalledWith(t testing.TB, game *GameSpy, winner string) {
+	t.Helper()
+
+	if game.FinishCalledWith != winner {
+		t.Errorf("expected finish called with %q, but got %q", winner, game.FinishCalledWith)
 	}
 }

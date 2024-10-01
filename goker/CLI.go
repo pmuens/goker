@@ -2,39 +2,51 @@ package goker
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
-	"time"
 )
 
-const PlayerPrompt = "Please enter the number of players: "
+const (
+	PlayerPrompt         = "Please enter the number of players: "
+	BadPlayerInputErrMsg = "Bad value received for number of players, please try again with a number"
+	BadWinnerInputMsg    = "invalid winner input, expect format of `PlayerName wins`"
+)
 
 type CLI struct {
-	in      *bufio.Scanner
-	out     io.Writer
-	store   PlayerStore
-	alerter BlindAlerter
+	in   *bufio.Scanner
+	out  io.Writer
+	game Game
 }
 
-func NewCLI(in io.Reader, out io.Writer, store PlayerStore, alerter BlindAlerter) *CLI {
+func NewCLI(in io.Reader, out io.Writer, game Game) *CLI {
 	return &CLI{
-		in:      bufio.NewScanner(in),
-		out:     out,
-		store:   store,
-		alerter: alerter,
+		in:   bufio.NewScanner(in),
+		out:  out,
+		game: game,
 	}
 }
 
 func (c *CLI) PlayPoker() {
 	fmt.Fprint(c.out, PlayerPrompt)
-	numberOfPlayers, _ := strconv.Atoi(c.readLine())
 
-	c.scheduleBlindAlerts(numberOfPlayers)
-	userInput := c.readLine()
+	numberOfPlayers, err := strconv.Atoi(c.readLine())
+	if err != nil {
+		fmt.Fprint(c.out, BadPlayerInputErrMsg)
+		return
+	}
 
-	c.store.RecordWin(extractWinner(userInput))
+	c.game.Start(numberOfPlayers)
+
+	winner, err := extractWinner(c.readLine())
+	if err != nil {
+		fmt.Fprint(c.out, BadWinnerInputMsg)
+		return
+	}
+
+	c.game.Finish(winner)
 }
 
 func (c *CLI) readLine() string {
@@ -42,17 +54,10 @@ func (c *CLI) readLine() string {
 	return c.in.Text()
 }
 
-func extractWinner(userInput string) string {
-	return strings.Replace(userInput, " wins", "", 1)
-}
-
-func (c *CLI) scheduleBlindAlerts(numberOfPlayers int) {
-	blindIncrement := time.Duration(5+numberOfPlayers) * time.Minute
-
-	blinds := []int{100, 200, 300, 400, 500, 600, 800, 1000, 2000, 4000, 8000}
-	blindTime := 0 * time.Second
-	for _, blind := range blinds {
-		c.alerter.ScheduleAlertAt(blindTime, blind)
-		blindTime = blindTime + blindIncrement
+func extractWinner(userInput string) (string, error) {
+	if !strings.Contains(userInput, " wins") {
+		return "", errors.New(BadWinnerInputMsg)
 	}
+
+	return strings.Replace(userInput, " wins", "", 1), nil
 }

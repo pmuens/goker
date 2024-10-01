@@ -17,7 +17,11 @@ func main() {
 	}
 	defer close()
 
+	game := goker.NewTexasHoldem(goker.BlindAlerterFunc(goker.StdOutAlerter), store)
+	cli := goker.NewCLI(os.Stdin, os.Stdout, game)
+
 	fmt.Println("Let's player poker")
 	fmt.Println("Type `{Name} wins` to record a win")
-	goker.NewCLI(os.Stdin, os.Stdout, store, goker.BlindAlerterFunc(goker.StdOutAlerter)).PlayPoker()
+
+	cli.PlayPoker()
 }
