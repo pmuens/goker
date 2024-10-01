@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // Stubs.
@@ -103,6 +105,30 @@ func CheckScheduledAlerts(t *testing.T, alerts []ScheduledAlert, blindAlerter *S
 			got := blindAlerter.Alerts[i]
 			AssertScheduledAlert(t, got, want)
 		})
+	}
+}
+
+func MustMakePlayerServer(t *testing.T, store PlayerStore) *PlayerServer {
+	server, err := NewPlayerServer(store)
+	if err != nil {
+		t.Fatalf("problem creating player server %v", err)
+	}
+	return server
+}
+
+func MustDialWS(t *testing.T, url string) *websocket.Conn {
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatalf("could not open a ws connection on %s %v", url, err)
+	}
+	return ws
+}
+
+func WriteWSMessage(t testing.TB, conn *websocket.Conn, message string) {
+	t.Helper()
+
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
+		t.Fatalf("could not send message over ws connection %v", err)
 	}
 }
 

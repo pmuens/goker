@@ -9,9 +9,19 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+
+	"github.com/gorilla/websocket"
 )
 
-const jsonContentType = "application/json"
+const (
+	htmlTemplatePath = "game.html"
+	jsonContentType  = "application/json"
+)
+
+var wsUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
 type Player struct {
 	Name string
@@ -27,35 +37,43 @@ type PlayerStore interface {
 type PlayerServer struct {
 	Store PlayerStore
 	http.Handler
+	template *template.Template
 }
 
-func NewPlayerServer(store PlayerStore) *PlayerServer {
+func NewPlayerServer(store PlayerStore) (*PlayerServer, error) {
 	p := new(PlayerServer)
 
+	// See: https://stackoverflow.com/a/38644571
+	_, b, _, _ := runtime.Caller(0)
+	basePath := filepath.Dir(b)
+
+	tmpl, err := template.ParseFiles(path.Join(basePath, htmlTemplatePath))
+	if err != nil {
+		return nil, fmt.Errorf("problem opening %s %v", htmlTemplatePath, err)
+	}
+
+	p.template = tmpl
 	p.Store = store
 
 	router := http.NewServeMux()
+	router.Handle("/ws", http.HandlerFunc(p.webSocket))
 	router.Handle("/game", http.HandlerFunc(p.game))
 	router.Handle("/league", http.HandlerFunc(p.leagueHandler))
 	router.Handle("/players/", http.HandlerFunc(p.playersHandler))
 
 	p.Handler = router
 
-	return p
+	return p, nil
+}
+
+func (p *PlayerServer) webSocket(w http.ResponseWriter, r *http.Request) {
+	conn, _ := wsUpgrader.Upgrade(w, r, nil)
+	_, winnerMsg, _ := conn.ReadMessage()
+	p.Store.RecordWin(string(winnerMsg))
 }
 
 func (p *PlayerServer) game(w http.ResponseWriter, r *http.Request) {
-	// See: https://stackoverflow.com/a/38644571
-	_, b, _, _ := runtime.Caller(0)
-	basePath := filepath.Dir(b)
-
-	tmpl, err := template.ParseFiles(path.Join(basePath, "game.html"))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("problem loading template %s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-
-	tmpl.Execute(w, nil)
+	p.template.Execute(w, nil)
 }
 
 func (p *PlayerServer) leagueHandler(w http.ResponseWriter, r *http.Request) {
