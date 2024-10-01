@@ -1,10 +1,12 @@
 package goker
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"slices"
 	"testing"
+	"time"
 )
 
 // Stubs.
@@ -25,6 +27,25 @@ func (s *StubPlayerStore) RecordWin(name string) {
 
 func (s *StubPlayerStore) GetLeague() League {
 	return s.league
+}
+
+// Spys.
+type SpyBlindAlerter struct {
+	Alerts []ScheduledAlert
+}
+
+func (s *SpyBlindAlerter) ScheduleAlertAt(at time.Duration, amount int) {
+	s.Alerts = append(s.Alerts, ScheduledAlert{at, amount})
+}
+
+// Types.
+type ScheduledAlert struct {
+	At     time.Duration
+	Amount int
+}
+
+func (s ScheduledAlert) String() string {
+	return fmt.Sprintf("%d chips at %v", s.Amount, s.At)
 }
 
 // Helper functions.
@@ -105,5 +126,19 @@ func AssertResponseBody(t testing.TB, got, want string) {
 
 	if got != want {
 		t.Errorf("response body is wrong, got %q, want %q", got, want)
+	}
+}
+
+func AssertScheduledAlert(t testing.TB, got ScheduledAlert, want ScheduledAlert) {
+	gotAmount := got.Amount
+	wantAmount := want.Amount
+	if gotAmount != wantAmount {
+		t.Errorf("got amount %d, want %d", gotAmount, wantAmount)
+	}
+
+	gotAt := got.At
+	wantAt := want.At
+	if gotAt != wantAt {
+		t.Errorf("got scheduled time of %v, want %v", gotAt, wantAt)
 	}
 }

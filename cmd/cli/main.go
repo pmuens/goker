@@ -19,5 +19,5 @@ func main() {
 
 	fmt.Println("Let's player poker")
 	fmt.Println("Type `{Name} wins` to record a win")
-	goker.NewCLI(os.Stdin, store).PlayPoker()
+	goker.NewCLI(os.Stdin, store, goker.BlindAlerterFunc(goker.StdOutAlerter)).PlayPoker()
 }
